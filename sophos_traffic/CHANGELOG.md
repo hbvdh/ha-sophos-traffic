@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+- `app_overrides`: Sophos `app_name` naar eigen categorie. Standaard worden
+  *QUIC* en *Secure Socket Layer Protocol* uit *Infrastructure* gehaald, zodat
+  niet-herkend verkeer apart zichtbaar is.
+
 ## 0.1.3
 - `dst_overrides`: bestemmings-IP of -subnet naar eigen categorie (bijv. Pulseway).
 

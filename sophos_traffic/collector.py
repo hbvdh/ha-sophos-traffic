@@ -19,7 +19,7 @@ import socket
 import threading
 import time
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
@@ -87,9 +87,43 @@ def classify(fields):
         return None
     if rx < 0 or tx < 0 or (rx == 0 and tx == 0):
         return None
-    category = override_for(fields.get("dst_ip", "")) \
-        or fields.get("app_category", "").strip() or UNCATEGORIZED
+    category = (override_for(fields.get("dst_ip", ""))
+                or APP_OVERRIDES.get(fields.get("app_name", "").strip().lower())
+                or fields.get("app_category", "").strip()
+                or UNCATEGORIZED)
     return category, rx, tx
+
+
+# --------------------------------------------------------------------------
+# App-overrides (app_overrides uit /data/options.json)
+# --------------------------------------------------------------------------
+
+APP_OVERRIDES = {}  # app_name (lowercase) -> categorie
+
+
+def load_app_overrides(path=OPTIONS_FILE):
+    """Leest app_overrides: [{app: "QUIC", category: "QUIC (niet herkend)"}]."""
+    result = {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            items = json.load(fh).get("app_overrides", []) or []
+    except FileNotFoundError:
+        return result
+    except (ValueError, AttributeError) as err:
+        log.warning("options.json onleesbaar (%s), geen app-overrides", err)
+        return result
+    for item in items:
+        try:
+            app = str(item["app"]).strip()
+            cat = str(item["category"]).strip()
+            if not app or not cat:
+                raise ValueError("lege app of categorie")
+        except (KeyError, ValueError, TypeError) as err:
+            log.warning("Ongeldige app-override %s: %s", item, err)
+            continue
+        result[app.lower()] = cat
+        log.info("App-override: %s -> %s", app, cat)
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -325,8 +359,9 @@ def main():
     else:
         log.warning("firewall_ip niet ingesteld: syslog van elk adres wordt verwerkt")
 
-    global OVERRIDES
+    global OVERRIDES, APP_OVERRIDES
     OVERRIDES = load_overrides()
+    APP_OVERRIDES = load_app_overrides()
     counters = Counters(STATE_FILE, MAX_CATEGORIES)
     publisher = Publisher(counters)
     publisher.start()

@@ -31,6 +31,9 @@ Bestanden:
 | `max_categories` | 60 | Daarboven komt alles in *Other categories* |
 | `log_level` | info | `debug` toont genegeerde regels (max. 5 per 15 min) |
 | `dst_overrides` | Pulseway | Lijst `ip` (adres of subnet) → `category` |
+| `app_overrides` | QUIC, SSL | Lijst `app` (Sophos `app_name`, hoofdletterongevoelig) → `category` |
+
+Volgorde: `dst_overrides` gaat voor `app_overrides`, daarna de Sophos-categorie.
 
 ## 2. Sophos (SFOS 22)
 
