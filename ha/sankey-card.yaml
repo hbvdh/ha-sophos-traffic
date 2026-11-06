@@ -1,0 +1,45 @@
+# Sankey Chart Card (MindFreeze, v6.x) — internetverkeer vandaag
+# Categorieën uitbreiden zodra je na een dag ziet welke er binnenkomen
+# (Settings → Devices & services → MQTT → device "Sophos Traffic").
+type: custom:sankey-chart
+title: Internet vandaag
+show_names: true
+unit_prefix: auto
+round: 1
+height: 300
+time_period_from: "now/d"
+sections:
+  - {}
+  - sort_by: state
+nodes:
+  - id: sensor.sophos_wan_download
+    name: Internet
+    section: 0
+  - id: sensor.sophos_traffic_streaming_media_download
+    name: Streaming
+    section: 1
+  - id: sensor.sophos_traffic_social_networking_download
+    name: Social
+    section: 1
+  - id: sensor.sophos_traffic_infrastructure_download
+    name: Infrastructure
+    section: 1
+  - id: sensor.sophos_traffic_uncategorized_download
+    name: Uncategorized
+    section: 1
+  - id: internet_niet_geclassificeerd
+    type: remaining_parent_state
+    name: Niet geclassificeerd
+    section: 1
+links:
+  - source: sensor.sophos_wan_download
+    target: sensor.sophos_traffic_streaming_media_download
+  - source: sensor.sophos_wan_download
+    target: sensor.sophos_traffic_social_networking_download
+  - source: sensor.sophos_wan_download
+    target: sensor.sophos_traffic_infrastructure_download
+  - source: sensor.sophos_wan_download
+    target: sensor.sophos_traffic_uncategorized_download
+  - source: sensor.sophos_wan_download
+    target: internet_niet_geclassificeerd
+ignore_missing_entities: true
