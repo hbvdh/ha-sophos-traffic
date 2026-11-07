@@ -1,5 +1,5 @@
 name: Sophos Traffic Collector
-version: "0.4.2"
+version: "0.4.3"
 slug: sophos_traffic
 description: >-
   Telt internetverkeer per Sophos app-categorie uit de firewall-syslog en
@@ -26,6 +26,7 @@ options:
   snmp_interval: 60
   meld_software_update: true
   melding_interval: 60
+  negeer_ntp: true
   devices: []
   dst_overrides:
     - ip: 130.255.171.133
@@ -46,6 +47,7 @@ schema:
   snmp_interval: int(10,600)
   meld_software_update: bool
   melding_interval: int(1,1440)
+  negeer_ntp: bool
   devices:
     - mac: match(^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$)
       name: str

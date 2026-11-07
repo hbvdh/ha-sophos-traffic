@@ -34,6 +34,24 @@ def is_internet(dst_ip):
         return False
 
 
+NTP_PORT = "123"
+
+
+def is_ntp(fields):
+    """Tijdsynchronisatie (UDP 123)."""
+    proto = (fields.get("protocol") or "").upper()
+    return fields.get("dst_port") == NTP_PORT and proto in ("", "UDP", "17")
+
+
+def load_negeer_ntp(path):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            value = json.load(fh).get("negeer_ntp", True)
+    except (FileNotFoundError, ValueError):
+        return True
+    return value if isinstance(value, bool) else True
+
+
 def load_device_config(path):
     """Leest devices, meld_software_update en melding_interval uit options.json."""
     devices, melden_updates, interval_min = {}, True, 60
@@ -76,8 +94,10 @@ def load_device_config(path):
 class Devices:
     """Tellers per benoemd apparaat, met persistentie in een klein JSON-bestand."""
 
-    def __init__(self, path, config, melden_updates=True, interval_min=60):
+    def __init__(self, path, config, melden_updates=True, interval_min=60,
+                 negeer_ntp=True):
         self.path = path
+        self.negeer_ntp = negeer_ntp
         self.config = config            # mac -> {name, profile}
         self.melden_updates = melden_updates
         self.interval = interval_min * 60
@@ -149,6 +169,8 @@ class Devices:
                        or is_internet(fields.get("dst_ip", "")))
         if not to_internet:
             return None
+        if self.negeer_ntp and is_ntp(fields):
+            return None  # tijdsync telt niet als internetcontact
         subtype = fields.get("log_subtype")
         now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
 

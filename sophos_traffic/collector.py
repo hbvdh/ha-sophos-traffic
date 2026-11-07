@@ -22,7 +22,7 @@ import time
 import devices
 import snmp
 
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
@@ -603,11 +603,14 @@ def main():
     counters = Counters(STATE_FILE, MAX_CATEGORIES)
     net_counters = Counters(NET_STATE_FILE, MAX_NETWORKS, overflow=NET_OVERFLOW)
     dev_config, melden_updates, interval_min = devices.load_device_config(OPTIONS_FILE)
-    dev = devices.Devices(DEV_STATE_FILE, dev_config, melden_updates, interval_min)
+    negeer_ntp = devices.load_negeer_ntp(OPTIONS_FILE)
+    dev = devices.Devices(DEV_STATE_FILE, dev_config, melden_updates, interval_min,
+                          negeer_ntp)
     if dev_config:
         log.info("%d apparaten, melding max. 1x per %d min per apparaat, "
-                 "software-updates %s", len(dev_config), interval_min,
-                 "melden" if melden_updates else "niet melden")
+                 "software-updates %s, NTP %s", len(dev_config), interval_min,
+                 "melden" if melden_updates else "niet melden",
+                 "genegeerd" if negeer_ntp else "geteld")
     publisher = Publisher(counters, net_counters, dev)
     snmp_cfg = load_snmp_config()
     publisher.wan_enabled = snmp_cfg is not None

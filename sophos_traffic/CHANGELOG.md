@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+- `negeer_ntp` (standaard aan): tijdsynchronisatie (UDP 123) van benoemde
+  apparaten telt niet als internetcontact; geen melding en geen update van
+  *laatste internetcontact*.
+
 ## 0.4.2
 - Elk benoemd apparaat is een eigen HA-device (gekoppeld aan *Sophos Traffic*),
   zodat namen kort zijn: "S-HB-NAS03 download" in plaats van

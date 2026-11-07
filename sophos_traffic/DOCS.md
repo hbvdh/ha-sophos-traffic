@@ -40,6 +40,7 @@ Alles komt onder één device **Sophos Traffic** (Settings → Devices & service
 | `devices` | leeg | Benoemde apparaten: `mac`, `name`, `profile` (zie hieronder) |
 | `meld_software_update` | aan | Ook melden als een `lokaal`-apparaat een update ophaalt |
 | `melding_interval` | 60 | Minuten tussen meldingen per apparaat (1–1440) |
+| `negeer_ntp` | aan | Tijdsync (UDP 123) van benoemde apparaten niet als internetcontact tellen |
 | `dst_overrides` | Pulseway | Lijst `ip` (adres of subnet) → `category` |
 | `app_overrides` | QUIC, SSL | Lijst `app` (Sophos `app_name`, hoofdletterongevoelig) → `category` |
 
