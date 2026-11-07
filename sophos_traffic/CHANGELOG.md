@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+- Benoemde apparaten (`devices`: MAC, naam, profiel `lokaal`/`internet`/`geblokkeerd`).
+  Per apparaat sensoren voor download, upload, sessies naar internet,
+  geblokkeerde pogingen en laatste internetcontact.
+- Event-entity `event.sophos_traffic_melding`: vuurt bij internetcontact van een
+  `lokaal`-apparaat, met categorie, bestemming, poort en land. Maximaal één keer
+  per apparaat per `melding_interval` minuten.
+- `meld_software_update`: firmware-/software-updates van lokale apparaten wel of
+  niet melden.
+- Geweigerde regels naar internet worden per benoemd apparaat geteld (niet opgeslagen).
+- Apparaten die uit de lijst verdwijnen, worden ook uit HA verwijderd.
+- Voorbeelden: automation voor de melding en trend-cards.
+
 ## 0.3.0
 - Tellers per netwerk: bytes per inkomende firewall-interface (`in_interface`,
   bijv. VLAN's), als sensoren `Netwerk <interface> download/upload`.

@@ -37,6 +37,9 @@ Alles komt onder één device **Sophos Traffic** (Settings → Devices & service
 | `snmp_community` | leeg | SNMP v2c-community. Leeg = SNMP uit |
 | `snmp_interface` | leeg | WAN-interface op naam (`Port11`) of als ifIndex (`16`). Leeg = SNMP uit |
 | `snmp_interval` | 60 | Seconden tussen SNMP-metingen (10–600) |
+| `devices` | leeg | Benoemde apparaten: `mac`, `name`, `profile` (zie hieronder) |
+| `meld_software_update` | aan | Ook melden als een `lokaal`-apparaat een update ophaalt |
+| `melding_interval` | 60 | Minuten tussen meldingen per apparaat (1–1440) |
 | `dst_overrides` | Pulseway | Lijst `ip` (adres of subnet) → `category` |
 | `app_overrides` | QUIC, SSL | Lijst `app` (Sophos `app_name`, hoofdletterongevoelig) → `category` |
 
@@ -45,6 +48,33 @@ Volgorde bij het indelen: `dst_overrides`, dan `app_overrides`, dan de Sophos-ca
 Met `snmp_interface` op naam zoekt de app zelf het ifIndex op, en opnieuw als het
 na een firmware-update verandert. Valt SNMP weg, dan gaan de WAN-sensoren op
 *unavailable* en probeert de app het elke `snmp_interval` opnieuw.
+
+### Apparaten en profielen
+
+Apparaten worden herkend aan hun **MAC-adres** (niet het IP, want dat kan wisselen).
+Alleen apparaten in de lijst krijgen eigen sensoren; de rest wordt per netwerk
+samengevoegd. Persoonlijke apparaten verschijnen dus alleen als je ze zelf toevoegt.
+
+| Profiel | Bedoeld voor | Wat de app doet |
+|---|---|---|
+| `lokaal` | IoT dat internet mag maar niet hoort te gebruiken | Melding bij elk contact met internet |
+| `internet` | Servers, NAS, pc's, apparaten die de cloud nodig hebben | Alleen tellers en trends |
+| `geblokkeerd` | Apparaten die in de firewall dichtstaan | Teller met geblokkeerde pogingen |
+
+Invullen via **Configuration** → ⋮ → **Edit in YAML**:
+
+```yaml
+devices:
+  - mac: D8:85:AC:EF:40:10
+    name: Shelly EM Mini 1
+    profile: lokaal
+  - mac: 02:11:32:2A:5F:4A
+    name: NAS03
+    profile: internet
+```
+
+Telefoons met een willekeurig (privé) wifi-adres zet je voor je eigen netwerk op
+*Vast*, anders verandert het MAC.
 
 ## 2. Sophos (SFOS 22)
 
@@ -76,6 +106,15 @@ Daar zie je de interfacenamen voor `snmp_interface`.
 | `sensor.sophos_traffic_<categorie>_download` / `_upload` | Syslog, per categorie |
 | `sensor.sophos_traffic_total_download` / `_upload` | Som van alle categorieën |
 | `sensor.sophos_traffic_netwerk_<interface>_download` / `_upload` | Syslog, per inkomende interface (VLAN) |
+| `sensor.sophos_traffic_apparaat_<naam>_download` / `_upload` | Per benoemd apparaat, bytes naar/van internet |
+| `sensor.sophos_traffic_apparaat_<naam>_sessies` | Aantal afgesloten sessies naar internet |
+| `sensor.sophos_traffic_apparaat_<naam>_geblokkeerd` | Aantal geweigerde pogingen naar internet |
+| `sensor.sophos_traffic_apparaat_<naam>_laatste_internetcontact` | Tijdstip van het laatste internetcontact |
+| `event.sophos_traffic_melding` | Melding bij internetcontact van een `lokaal`-apparaat |
+
+De melding draagt als attributen: `apparaat`, `mac`, `categorie`, `app`,
+`bestemming`, `poort`, `land`, `netwerk`, `tijd`. Een voorbeeld-automation staat in
+[`ha/automation-melding.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/automation-melding.yaml).
 
 De netwerksensoren heten naar de interface op de firewall, bijvoorbeeld
 `sensor.sophos_traffic_netwerk_lag01_11_download` voor `LAG01.11`. Een leesbare
@@ -102,6 +141,9 @@ Sankey `energy_date_selection: true` door `time_period_from: "now/d"`.
 
 Plak card-YAML niet in de *Raw configuration editor*; die verwacht het hele dashboard.
 
+Trends per apparaat: zie [`ha/trend-cards.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/trend-cards.yaml)
+(staafgrafiek per dag, laatste internetcontact, geblokkeerde pogingen).
+
 ## Opslag en opruiming
 
 - App: alleen `state.json` (overschreven, groeit niet). Stdout gaat naar de
@@ -119,6 +161,8 @@ Plak card-YAML niet in de *Raw configuration editor*; die verwacht het hele dash
   zelf en protocol-overhead.
 - Versleuteld verkeer dat Sophos niet herkent, komt als *QUIC* of *SSL (niet herkend)*.
 - UDP-syslog: sessies die afsluiten terwijl de app herstart, gaan verloren.
+- Geweigerde pogingen tellen alleen als de firewallregel logt. QUIC-rejects zonder
+  logging tellen dus niet mee.
 
 ## Overstappen van 0.1.x met SNMP-package
 

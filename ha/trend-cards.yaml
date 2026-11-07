@@ -1,0 +1,39 @@
+# Trends per benoemd apparaat (voorbeeld). Voeg elke card apart toe via
+# Add card → Manual, of zet ze in een vertical-stack. Vervang de entity-ID's
+# door die van jouw apparaten (Settings → Devices & services → MQTT →
+# device "Sophos Traffic"; ze heten sensor.sophos_traffic_apparaat_<naam>_...).
+
+# 1) Internetverkeer per dag van apparaten met profiel "internet"
+type: statistics-graph
+title: Download per dag – servers
+chart_type: bar
+period: day
+days_to_show: 30
+stat_types:
+  - change
+grid_options:
+  columns: full
+entities:
+  - entity: sensor.sophos_traffic_apparaat_server_download
+    name: Server
+  - entity: sensor.sophos_traffic_apparaat_nas_download
+    name: NAS
+
+# 2) Laatste internetcontact van apparaten met profiel "lokaal"
+# type: entities
+# title: Lokale apparaten – laatste internetcontact
+# entities:
+#   - entity: sensor.sophos_traffic_apparaat_shelly_laatste_internetcontact
+#     name: Shelly
+#     format: relative
+
+# 3) Geblokkeerde pogingen per dag (profiel "geblokkeerd")
+# type: statistics-graph
+# title: Geblokkeerde pogingen per dag
+# chart_type: bar
+# period: day
+# days_to_show: 30
+# stat_types: [change]
+# entities:
+#   - entity: sensor.sophos_traffic_apparaat_koelkast_geblokkeerd
+#     name: Koelkast

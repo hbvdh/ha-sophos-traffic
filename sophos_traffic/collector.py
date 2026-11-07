@@ -19,14 +19,16 @@ import socket
 import threading
 import time
 
+import devices
 import snmp
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
 STATE_FILE = os.environ.get("STATE_FILE", "/data/state.json")
 NET_STATE_FILE = os.path.join(os.path.dirname(STATE_FILE) or ".", "state_net.json")
+DEV_STATE_FILE = os.path.join(os.path.dirname(STATE_FILE) or ".", "state_dev.json")
 FIREWALL_IP = os.environ.get("FIREWALL_IP", "").strip()
 if FIREWALL_IP.lower() in ("null", "none"):
     FIREWALL_IP = ""
@@ -52,6 +54,20 @@ MAX_NETWORKS = 20
 TOTAL_SLUG = "total"
 WAN_SLUG = "wan"
 WAN_AVAIL_TOPIC = f"{BASE_TOPIC}/{WAN_SLUG}/status"
+EVENT_TOPIC = f"{BASE_TOPIC}/melding"
+DEV_KINDS = {
+    # kind: (label, extra discovery-config)
+    "rx": ("download", {"unit_of_measurement": "B", "device_class": "data_size",
+                         "state_class": "total_increasing", "icon": "mdi:download-network"}),
+    "tx": ("upload", {"unit_of_measurement": "B", "device_class": "data_size",
+                       "state_class": "total_increasing", "icon": "mdi:upload-network"}),
+    "sessions": ("sessies", {"unit_of_measurement": "sessies",
+                             "state_class": "total_increasing", "icon": "mdi:swap-horizontal"}),
+    "blocked": ("geblokkeerd", {"unit_of_measurement": "pogingen",
+                                "state_class": "total_increasing", "icon": "mdi:shield-off"}),
+    "last_contact": ("laatste internetcontact", {"device_class": "timestamp",
+                                                 "icon": "mdi:clock-alert-outline"}),
+}
 
 STATS_LOG_INTERVAL = 900  # samenvatting in de log elke 15 minuten
 
@@ -95,12 +111,17 @@ def classify(fields):
         return None
     if rx < 0 or tx < 0 or (rx == 0 and tx == 0):
         return None
-    category = (override_for(fields.get("dst_ip", ""))
-                or APP_OVERRIDES.get(fields.get("app_name", "").strip().lower())
-                or fields.get("app_category", "").strip()
-                or UNCATEGORIZED)
+    category = category_for(fields)
     interface = fields.get("in_interface", "").strip() or "onbekend"
     return category, rx, tx, interface
+
+
+def category_for(fields):
+    """Categorie van een sessie: dst_overrides, dan app_overrides, dan Sophos."""
+    return (override_for(fields.get("dst_ip", ""))
+            or APP_OVERRIDES.get(fields.get("app_name", "").strip().lower())
+            or fields.get("app_category", "").strip()
+            or UNCATEGORIZED)
 
 
 # --------------------------------------------------------------------------
@@ -259,11 +280,12 @@ class Counters:
 # --------------------------------------------------------------------------
 
 class Publisher:
-    def __init__(self, counters, net_counters=None):
+    def __init__(self, counters, net_counters=None, dev=None):
         import paho.mqtt.client as mqtt
 
         self.counters = counters
         self.net_counters = net_counters
+        self.dev = dev
         self.wan_enabled = False
         self.last_wan = None  # (rx, tx) van de laatste geslaagde SNMP-meting
         self.connected = threading.Event()
@@ -350,6 +372,8 @@ class Publisher:
         if self.net_counters:
             for slug, entry in self.net_counters.snapshot().items():
                 self.publish_discovery(slug, entry["name"])
+        if self.dev is not None:
+            self.publish_device_discovery()
 
     # ---- WAN-tellers via SNMP ----
 
@@ -399,6 +423,53 @@ class Publisher:
             for slug, entry in self.net_counters.snapshot().items():
                 self.client.publish(f"{BASE_TOPIC}/{slug}/rx", entry["rx"], retain=True)
                 self.client.publish(f"{BASE_TOPIC}/{slug}/tx", entry["tx"], retain=True)
+        if self.dev is not None:
+            for mac, entry in self.dev.snapshot().items():
+                base = f"{BASE_TOPIC}/dev/{mac.replace(':', '')}"
+                for kind in DEV_KINDS:
+                    value = entry.get(kind)
+                    self.client.publish(f"{base}/{kind}",
+                                        "None" if value is None else value, retain=True)
+
+    # ---- benoemde apparaten en meldingen ----
+
+    @staticmethod
+    def _dev_config_topic(mac, kind):
+        return f"{DISCOVERY_PREFIX}/sensor/{DEVICE_ID}/dev_{mac.replace(':', '')}_{kind}/config"
+
+    def publish_device_discovery(self):
+        for mac, entry in self.dev.snapshot().items():
+            key = mac.replace(":", "")
+            for kind, (label, extra) in DEV_KINDS.items():
+                config = {
+                    "name": f"Apparaat {entry['name']} {label}",
+                    "unique_id": f"{DEVICE_ID}_dev_{key}_{kind}",
+                    "state_topic": f"{BASE_TOPIC}/dev/{key}/{kind}",
+                    "availability_topic": AVAIL_TOPIC,
+                    "device": self._device(),
+                }
+                config.update(extra)
+                self.client.publish(self._dev_config_topic(mac, kind),
+                                    json.dumps(config), qos=1, retain=True)
+        for mac, name in self.dev.removed:
+            log.info("Apparaat %s (%s) niet meer in de lijst, entities verwijderd", name, mac)
+            for kind in DEV_KINDS:
+                self.client.publish(self._dev_config_topic(mac, kind), "", qos=1, retain=True)
+        config = {
+            "name": "Melding",
+            "unique_id": f"{DEVICE_ID}_melding",
+            "state_topic": EVENT_TOPIC,
+            "event_types": ["internetcontact"],
+            "availability_topic": AVAIL_TOPIC,
+            "icon": "mdi:alert-network",
+            "device": self._device(),
+        }
+        self.client.publish(f"{DISCOVERY_PREFIX}/event/{DEVICE_ID}/melding/config",
+                            json.dumps(config), qos=1, retain=True)
+
+    def publish_event(self, payload):
+        if self.connected.is_set():
+            self.client.publish(EVENT_TOPIC, json.dumps(payload), qos=1, retain=False)
 
 
 # --------------------------------------------------------------------------
@@ -515,7 +586,13 @@ def main():
     APP_OVERRIDES = load_app_overrides()
     counters = Counters(STATE_FILE, MAX_CATEGORIES)
     net_counters = Counters(NET_STATE_FILE, MAX_NETWORKS, overflow=NET_OVERFLOW)
-    publisher = Publisher(counters, net_counters)
+    dev_config, melden_updates, interval_min = devices.load_device_config(OPTIONS_FILE)
+    dev = devices.Devices(DEV_STATE_FILE, dev_config, melden_updates, interval_min)
+    if dev_config:
+        log.info("%d apparaten, melding max. 1x per %d min per apparaat, "
+                 "software-updates %s", len(dev_config), interval_min,
+                 "melden" if melden_updates else "niet melden")
+    publisher = Publisher(counters, net_counters, dev)
     snmp_cfg = load_snmp_config()
     publisher.wan_enabled = snmp_cfg is not None
     publisher.start()
@@ -560,11 +637,19 @@ def main():
             else:
                 text = data.decode("utf-8", errors="replace")
                 for line in text.splitlines():
-                    result = classify(parse(line))
+                    fields = parse(line)
+                    result = classify(fields)
+                    if dev_config:
+                        alert = dev.handle(fields, result[0] if result else category_for(fields))
+                        if alert:
+                            log.info("Melding: %s -> %s (%s, %s %s)", alert["apparaat"],
+                                     alert["bestemming"], alert["categorie"],
+                                     alert["land"], alert["poort"])
+                            publisher.publish_event(alert)
                     if result is None:
                         stats["ignored"] += 1
                         if stats["ignored"] <= DEBUG_SAMPLES:
-                            f = parse(line)
+                            f = fields
                             log.debug(
                                 "Genegeerd: rule=%s subtype=%s event=%s zones=%s->%s "
                                 "if=%s->%s app=%s/%s bytes=%s/%s",
@@ -592,6 +677,7 @@ def main():
             publisher.publish_states()
             counters.save()
             net_counters.save()
+            dev.save()
             next_flush = now + FLUSH_INTERVAL
         if now >= next_stats:
             log.info("Laatste 15 min: %d datagrammen, %d geteld, %d genegeerd, %d van ander adres",
@@ -604,6 +690,7 @@ def main():
     publisher.publish_states()
     counters.save()
     net_counters.save()
+    dev.save()
     publisher.stop()
     sock.close()
     log.info("Gestopt")

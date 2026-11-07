@@ -1,0 +1,29 @@
+# Melding bij internetcontact van een apparaat met profiel "lokaal".
+# Settings → Automations & scenes → Create automation → ⋮ → Edit in YAML → plakken.
+# Vervang de actie door je eigen notify-service (bijv. notify.mobile_app_<telefoon>)
+# als je de melding op je telefoon wilt.
+alias: Sophos – internetcontact van lokaal apparaat
+description: Melding als een apparaat met profiel "lokaal" contact maakt met internet.
+mode: queued
+triggers:
+  - trigger: state
+    entity_id: event.sophos_traffic_melding
+conditions:
+  # niet bij herstart / herstel van de entity
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.from_state.state != 'unavailable'
+         and trigger.to_state.state not in ['unavailable', 'unknown']
+         and trigger.to_state.attributes.event_type == 'internetcontact' }}
+actions:
+  - action: persistent_notification.create
+    data:
+      title: "Internetcontact: {{ trigger.to_state.attributes.apparaat }}"
+      message: >-
+        {{ trigger.to_state.attributes.apparaat }} maakte contact met
+        {{ trigger.to_state.attributes.bestemming }}:{{ trigger.to_state.attributes.poort }}
+        ({{ trigger.to_state.attributes.land }}), categorie
+        {{ trigger.to_state.attributes.categorie }}
+        {%- if trigger.to_state.attributes.app %} / {{ trigger.to_state.attributes.app }}{% endif %},
+        via {{ trigger.to_state.attributes.netwerk }}.

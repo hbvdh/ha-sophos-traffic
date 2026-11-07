@@ -1,5 +1,5 @@
 name: Sophos Traffic Collector
-version: "0.3.0"
+version: "0.4.0"
 slug: sophos_traffic
 description: >-
   Telt internetverkeer per Sophos app-categorie uit de firewall-syslog en
@@ -24,6 +24,9 @@ options:
   max_categories: 60
   log_level: info
   snmp_interval: 60
+  meld_software_update: true
+  melding_interval: 60
+  devices: []
   dst_overrides:
     - ip: 130.255.171.133
       category: Pulseway
@@ -41,6 +44,12 @@ schema:
   snmp_community: password?
   snmp_interface: str?
   snmp_interval: int(10,600)
+  meld_software_update: bool
+  melding_interval: int(1,1440)
+  devices:
+    - mac: match(^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$)
+      name: str
+      profile: list(lokaal|internet|geblokkeerd)
   dst_overrides:
     - ip: str
       category: str
