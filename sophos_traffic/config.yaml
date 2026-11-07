@@ -1,9 +1,10 @@
 name: Sophos Traffic Collector
-version: "0.1.4"
+version: "0.2.0"
 slug: sophos_traffic
 description: >-
   Telt internetverkeer per Sophos app-categorie uit de firewall-syslog en
-  publiceert tellers via MQTT discovery. Slaat geen ruwe logs op.
+  publiceert tellers via MQTT discovery, plus het WAN-totaal via SNMP.
+  Slaat geen ruwe logs op.
 url: https://github.com/hbvdh/ha-sophos-traffic
 arch:
   - amd64
@@ -22,6 +23,7 @@ options:
   flush_interval: 30
   max_categories: 60
   log_level: info
+  snmp_interval: 60
   dst_overrides:
     - ip: 130.255.171.133
       category: Pulseway
@@ -35,6 +37,10 @@ schema:
   flush_interval: int(10,600)
   max_categories: int(5,200)
   log_level: list(debug|info|warning|error)
+  snmp_host: str?
+  snmp_community: password?
+  snmp_interface: str?
+  snmp_interval: int(10,600)
   dst_overrides:
     - ip: str
       category: str

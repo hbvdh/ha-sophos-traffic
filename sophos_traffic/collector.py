@@ -19,7 +19,9 @@ import socket
 import threading
 import time
 
-VERSION = "0.1.4"
+import snmp
+
+VERSION = "0.2.0"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
@@ -44,6 +46,8 @@ DEVICE_ID = "sophos_traffic"
 UNCATEGORIZED = "Uncategorized"
 OVERFLOW = "Other categories"
 TOTAL_SLUG = "total"
+WAN_SLUG = "wan"
+WAN_AVAIL_TOPIC = f"{BASE_TOPIC}/{WAN_SLUG}/status"
 
 STATS_LOG_INTERVAL = 900  # samenvatting in de log elke 15 minuten
 
@@ -253,6 +257,7 @@ class Publisher:
         import paho.mqtt.client as mqtt
 
         self.counters = counters
+        self.wan_enabled = False
         self.connected = threading.Event()
         try:
             self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
@@ -286,6 +291,8 @@ class Publisher:
         self.connected.set()
         client.publish(AVAIL_TOPIC, "online", qos=1, retain=True)
         self.publish_discovery_all()
+        if self.wan_enabled:
+            self.publish_wan_discovery()
         self.publish_states()
 
     def _on_disconnect(self, client, userdata, *args):
@@ -331,6 +338,37 @@ class Publisher:
         for slug, entry in self.counters.snapshot().items():
             self.publish_discovery(slug, entry["name"])
 
+    # ---- WAN-tellers via SNMP ----
+
+    def publish_wan_discovery(self):
+        for direction, label in (("rx", "download"), ("tx", "upload")):
+            config = {
+                "name": f"WAN {label}",
+                "unique_id": f"{DEVICE_ID}_{WAN_SLUG}_{label}",
+                "state_topic": f"{BASE_TOPIC}/{WAN_SLUG}/{direction}",
+                "availability": [{"topic": AVAIL_TOPIC},
+                                 {"topic": WAN_AVAIL_TOPIC}],
+                "availability_mode": "all",
+                "unit_of_measurement": "B",
+                "device_class": "data_size",
+                "state_class": "total_increasing",
+                "icon": "mdi:wan",
+                "device": self._device(),
+            }
+            topic = f"{DISCOVERY_PREFIX}/sensor/{DEVICE_ID}/{WAN_SLUG}_{label}/config"
+            self.client.publish(topic, json.dumps(config), qos=1, retain=True)
+
+    def publish_wan(self, rx, tx):
+        if not self.connected.is_set():
+            return
+        self.client.publish(f"{BASE_TOPIC}/{WAN_SLUG}/rx", rx, retain=True)
+        self.client.publish(f"{BASE_TOPIC}/{WAN_SLUG}/tx", tx, retain=True)
+        self.client.publish(WAN_AVAIL_TOPIC, "online", qos=1, retain=True)
+
+    def wan_unavailable(self):
+        if self.connected.is_set():
+            self.client.publish(WAN_AVAIL_TOPIC, "offline", qos=1, retain=True)
+
     def publish_states(self):
         if not self.connected.is_set():
             return
@@ -343,6 +381,93 @@ class Publisher:
             self.client.publish(f"{BASE_TOPIC}/{slug}/tx", entry["tx"], retain=True)
         self.client.publish(f"{BASE_TOPIC}/{TOTAL_SLUG}/rx", total_rx, retain=True)
         self.client.publish(f"{BASE_TOPIC}/{TOTAL_SLUG}/tx", total_tx, retain=True)
+
+
+# --------------------------------------------------------------------------
+# SNMP-poller (WAN-totaal)
+# --------------------------------------------------------------------------
+
+def load_snmp_config(path=OPTIONS_FILE):
+    """Geeft dict met host/community/interface/interval, of None als SNMP uit staat."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            opts = json.load(fh)
+    except (FileNotFoundError, ValueError):
+        return None
+
+    def opt(key, default=""):
+        value = opts.get(key)
+        return default if value in (None, "", "null") else value
+
+    community = str(opt("snmp_community")).strip()
+    interface = str(opt("snmp_interface")).strip()
+    if not community or not interface:
+        log.info("SNMP uit (snmp_community of snmp_interface niet ingesteld)")
+        return None
+    host = str(opt("snmp_host", FIREWALL_IP)).strip()
+    if not host:
+        log.warning("SNMP uit: geen snmp_host en geen firewall_ip ingesteld")
+        return None
+    try:
+        interval = max(10, min(600, int(opt("snmp_interval", 60))))
+    except (TypeError, ValueError):
+        interval = 60
+    return {"host": host, "community": community,
+            "interface": interface, "interval": interval}
+
+
+class SnmpPoller(threading.Thread):
+    """Leest periodiek ifHCIn/OutOctets van de WAN-interface uit."""
+
+    def __init__(self, cfg, publisher):
+        super().__init__(name="snmp", daemon=True)
+        self.cfg = cfg
+        self.publisher = publisher
+        self.client = snmp.SnmpClient(cfg["host"], cfg["community"])
+        self.stop_event = threading.Event()
+        self.ifindex = None
+        self.healthy = None  # None = nog onbekend
+
+    def _resolve(self):
+        name = self.cfg["interface"]
+        if name.isdigit():
+            return int(name)
+        return self.client.find_ifindex(name)
+
+    def poll_once(self):
+        if self.ifindex is None:
+            self.ifindex = self._resolve()
+            log.info("SNMP: %s op %s = ifIndex %d",
+                     self.cfg["interface"], self.cfg["host"], self.ifindex)
+        try:
+            rx = self.client.get(snmp.IF_HC_IN_OCTETS + (self.ifindex,))
+            tx = self.client.get(snmp.IF_HC_OUT_OCTETS + (self.ifindex,))
+        except snmp.SnmpError as err:
+            if "noSuch" in str(err):
+                self.ifindex = None  # interface hernummerd: opnieuw opzoeken
+            raise
+        if not isinstance(rx, int) or not isinstance(tx, int):
+            raise snmp.SnmpError("onverwacht type voor interfaceteller")
+        return rx, tx
+
+    def run(self):
+        while not self.stop_event.is_set():
+            try:
+                rx, tx = self.poll_once()
+                self.publisher.publish_wan(rx, tx)
+                if self.healthy is not True:
+                    log.info("SNMP: WAN-tellers worden uitgelezen (elke %d s)",
+                             self.cfg["interval"])
+                self.healthy = True
+            except (OSError, snmp.SnmpError) as err:
+                if self.healthy is not False:
+                    log.warning("SNMP mislukt (%s), blijft opnieuw proberen", err)
+                self.publisher.wan_unavailable()
+                self.healthy = False
+            self.stop_event.wait(self.cfg["interval"])
+
+    def stop(self):
+        self.stop_event.set()
 
 
 # --------------------------------------------------------------------------
@@ -364,7 +489,13 @@ def main():
     APP_OVERRIDES = load_app_overrides()
     counters = Counters(STATE_FILE, MAX_CATEGORIES)
     publisher = Publisher(counters)
+    snmp_cfg = load_snmp_config()
+    publisher.wan_enabled = snmp_cfg is not None
     publisher.start()
+    poller = None
+    if snmp_cfg:
+        poller = SnmpPoller(snmp_cfg, publisher)
+        poller.start()
 
     running = {"value": True}
 
@@ -439,6 +570,8 @@ def main():
             stats = dict.fromkeys(stats, 0)
             next_stats = now + STATS_LOG_INTERVAL
 
+    if poller:
+        poller.stop()
     publisher.publish_states()
     counters.save()
     publisher.stop()

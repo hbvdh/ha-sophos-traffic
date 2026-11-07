@@ -1,104 +1,112 @@
-# Sophos Traffic Collector — installatie
+# Sophos Traffic Collector
 
-Lokale HA-add-on die Sophos-firewall-syslog ontvangt (UDP 5514), per afgesloten
-LAN→WAN-sessie de bytes optelt per `app_category`, en dat via MQTT discovery als
-sensoren in HA zet. Er worden **geen logregels opgeslagen**; alleen
-`/data/state.json` met tellerstanden (paar KB, wordt overschreven).
+Home Assistant-app die het internetverkeer van een Sophos Firewall (SFOS) per
+applicatiecategorie telt, plus het totaal over de WAN-lijn, en dat via MQTT
+discovery als sensoren in Home Assistant zet. Bedoeld voor een Sankey-overzicht
+zoals het Energy dashboard.
 
-Bestanden:
+- **Categorieën**: de firewall-syslog komt binnen op UDP 5514. Per afgesloten
+  LAN→WAN-sessie worden de bytes opgeteld per `app_category`.
+- **WAN-totaal**: de app leest zelf de 64-bit interfacetellers van de
+  WAN-poort uit via SNMP. Een YAML-package in HA is niet nodig.
+- **Geen logopslag**: alleen `/data/state.json` met tellerstanden (paar KB,
+  wordt steeds overschreven).
 
-| Pad | Doel |
-|---|---|
-| `sophos_traffic/` | de app |
-| `ha/packages/sophos_traffic.yaml` | SNMP-sensoren WAN-totaal |
-| `ha/sankey-card.yaml` | dashboard-card |
+Alles komt onder één device **Sophos Traffic** (Settings → Devices & services → MQTT).
 
-## 1. App installeren
+## 1. Installeren
 
 1. **Settings → Apps → App store** → ⋮ → **Repositories** → voeg
    `https://github.com/hbvdh/ha-sophos-traffic` toe.
 2. Installeer **Sophos Traffic Collector** (bouwt lokaal, paar minuten).
-3. Tab **Configuration**: `firewall_ip` = het IP waarmee de XG syslog verstuurt.
-   Pas `dst_overrides` aan naar wens.
-4. **Start**, controleer de **Log**: `Verbonden met MQTT` en `Luistert op UDP 5514`.
+3. Tab **Configuration**: vul de opties in (zie hieronder). De SNMP-opties zijn
+   optioneel; je ziet ze via **Show unused optional configuration options**.
+4. **Start** en controleer de **Log**:
+   - `Verbonden met MQTT` en `Luistert op UDP 5514`
+   - met SNMP: `SNMP: Port11 op … = ifIndex …` en `WAN-tellers worden uitgelezen`
 
 ### Opties
 
 | Optie | Standaard | Betekenis |
 |---|---|---|
-| `firewall_ip` | leeg | Alleen syslog van dit adres verwerken |
+| `firewall_ip` | leeg | Alleen syslog van dit adres verwerken; ook standaard SNMP-host |
 | `flush_interval` | 30 | Seconden tussen MQTT-updates en opslaan van tellers |
 | `max_categories` | 60 | Daarboven komt alles in *Other categories* |
 | `log_level` | info | `debug` toont genegeerde regels (max. 5 per 15 min) |
+| `snmp_host` | `firewall_ip` | IP van de firewall voor SNMP |
+| `snmp_community` | leeg | SNMP v2c-community. Leeg = SNMP uit |
+| `snmp_interface` | leeg | WAN-interface op naam (`Port11`) of als ifIndex (`16`). Leeg = SNMP uit |
+| `snmp_interval` | 60 | Seconden tussen SNMP-metingen (10–600) |
 | `dst_overrides` | Pulseway | Lijst `ip` (adres of subnet) → `category` |
 | `app_overrides` | QUIC, SSL | Lijst `app` (Sophos `app_name`, hoofdletterongevoelig) → `category` |
 
-Volgorde: `dst_overrides` gaat voor `app_overrides`, daarna de Sophos-categorie.
+Volgorde bij het indelen: `dst_overrides`, dan `app_overrides`, dan de Sophos-categorie.
+
+Met `snmp_interface` op naam zoekt de app zelf het ifIndex op, en opnieuw als het
+na een firmware-update verandert. Valt SNMP weg, dan gaan de WAN-sensoren op
+*unavailable* en probeert de app het elke `snmp_interval` opnieuw.
 
 ## 2. Sophos (SFOS 22)
 
-Labels kunnen per build iets afwijken — controleer op het scherm.
+Labels kunnen per build iets afwijken; controleer op het scherm.
 
-1. **QUIC**: regel boven `#Default_OptimusPrime_Policy` (en evt. andere
-   uitgaande regels): LAN → WAN, UDP 443, actie **Reject**, *Log firewall traffic* uit.
-2. **Syslog**: *System services → Log settings* → syslog-server toevoegen:
+1. **Syslog**: *System services → Log settings* → syslog-server toevoegen:
    IP van HA, **UDP 5514**, facility DAEMON, severity Information,
    format **Standard syslog protocol**.
-3. Vink in de log-settings-tabel voor deze server **alleen Firewall → Firewall rules** aan.
-4. Controleer dat *Log firewall traffic* aanstaat op alle uitgaande regels.
-5. **SNMP**: *Administration → SNMP* → agent aan, v2c-community alleen voor het
+2. Vink in de log-settings-tabel voor deze server **alleen Firewall → Firewall rules** aan.
+3. Controleer dat *Log firewall traffic* aanstaat op alle uitgaande regels, en dat
+   application control actief is op die regels.
+4. **SNMP**: *Administration → SNMP* → agent aan, v2c-community alleen voor het
    HA-IP; *Administration → Device access* → SNMP aan voor de zone waar HA in zit.
 
-Na een paar minuten verschijnt in HA onder
-**Settings → Devices & services → MQTT** het device **Sophos Traffic** met per
-categorie een download- en uploadsensor, plus `Total download/upload`.
-
-## 3. ifIndex van Port11 opzoeken
-
-In **Advanced SSH & Web Terminal**:
+Testen vanuit de **Advanced SSH & Web Terminal**:
 
 ```sh
 apk add net-snmp-tools
 snmpwalk -v2c -c <community> <xg-ip> 1.3.6.1.2.1.31.1.1.1.1
 ```
 
-De regel met `Port11` eindigt op het ifIndex-nummer, bijv. `...1.1.1.1.11 = STRING: "Port11"` → ifIndex 11.
-Controleer: `snmpget -v2c -c <community> <xg-ip> 1.3.6.1.2.1.31.1.1.1.6.<ifIndex>` geeft een grote, oplopende teller.
+Daar zie je de interfacenamen voor `snmp_interface`.
 
-## 4. SNMP-package in HA
+## 3. Sensoren
 
-1. Zet in `configuration.yaml` (eenmalig, als je nog geen packages gebruikt):
+| Sensor | Bron |
+|---|---|
+| `sensor.sophos_traffic_wan_download` / `_upload` | SNMP, realtime totaal over de WAN-lijn |
+| `sensor.sophos_traffic_<categorie>_download` / `_upload` | Syslog, per categorie |
+| `sensor.sophos_traffic_total_download` / `_upload` | Som van alle categorieën |
 
-   ```yaml
-   homeassistant:
-     packages: !include_dir_named packages
-   ```
+Alle sensoren: `device_class: data_size`, `state_class: total_increasing`, in bytes.
+Weergave in GB stel je per sensor in (*Unit of measurement*); de long-term
+statistics blijven in bytes.
 
-2. Kopieer `ha/packages/sophos_traffic.yaml` naar `/config/packages/`,
-   vul `host` en `<IFINDEX>` in.
-3. `secrets.yaml`: `sophos_snmp_community: "<jouw community>"`
-4. **Developer tools → YAML → Check configuration**, daarna herstarten.
+## 4. Dashboard
 
-## 5. Dashboard
-
-**Ha Sankey Chart** is al geïnstalleerd. Nieuwe card → **Manual** → inhoud van
-`ha/sankey-card.yaml`. Na een dag de categorieën aanvullen met wat er echt
-binnenkomt. Weergave in GB stel je per sensor in via entity-instellingen
-(*Unit of measurement*), de card doet dat zelf met `unit_prefix: auto`.
+Installeer **Sankey Chart Card** (MindFreeze) via HACS. Nieuwe card → **Manual** →
+inhoud van [`ha/sankey-card.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/sankey-card.yaml).
+Pas de categorieën aan naar wat er bij jou binnenkomt.
 
 ## Opslag en opruiming
 
-- Add-on: alleen `state.json` (overschreven, groeit niet). Stdout gaat naar de
+- App: alleen `state.json` (overschreven, groeit niet). Stdout gaat naar de
   HA OS-journal (eigen limieten). Elke 15 min één regel met statistieken.
-- Max. aantal categorieën is begrensd (`max_categories`, standaard 60);
-  daarboven gaat alles naar *Other categories*.
-- HA: sensoren vallen onder je recorder (`sensor`-domein, 120 dagen);
-  long-term statistics zijn één rij per uur per sensor.
+- Max. aantal categorieën is begrensd (`max_categories`).
+- HA: sensoren vallen onder je recorder; long-term statistics zijn één rij per
+  uur per sensor.
 
 ## Bekende beperkingen
 
-- Bytes tellen pas mee bij het **afsluiten** van een sessie; lange streams ijlen na.
-  Het SNMP-totaal is wel realtime → het verschil zie je als *Niet geclassificeerd*.
-- *Niet geclassificeerd* bevat ook inkomend verkeer (port forwards), verkeer van de
-  firewall zelf en protocol-overhead.
-- UDP-syslog: tijdens een HA-herstart afgesloten sessies gaan verloren.
+- Bytes per categorie tellen pas mee bij het **afsluiten** van een sessie; lange
+  verbindingen (streams, RMM-agents) ijlen na. Het WAN-totaal is wel realtime;
+  het verschil is in de card de restpost.
+- De restpost bevat ook inkomend verkeer (port forwards), verkeer van de firewall
+  zelf en protocol-overhead.
+- Versleuteld verkeer dat Sophos niet herkent, komt als *QUIC* of *SSL (niet herkend)*.
+- UDP-syslog: sessies die afsluiten terwijl de app herstart, gaan verloren.
+
+## Overstappen van 0.1.x met SNMP-package
+
+Had je het WAN-totaal via `/config/packages/sophos_traffic.yaml`: verwijder dat
+bestand en de secret `sophos_snmp_community`, herstart HA en verwijder daarna de
+oude entities `sensor.sophos_wan_download` / `_upload` (Settings → Entities).
+De nieuwe WAN-sensoren heten `sensor.sophos_traffic_wan_*`.

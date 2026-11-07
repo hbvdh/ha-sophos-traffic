@@ -7,7 +7,9 @@ een Sankey-overzicht zoals het Energy dashboard.
 - Ontvangt de firewall-syslog (UDP 5514), telt bytes per afgesloten LAN→WAN-sessie
   per `app_category` en publiceert via MQTT discovery.
 - Slaat **geen** ruwe logs op; alleen tellerstanden (`/data/state.json`, paar KB).
-- Optionele `dst_overrides` om vaste bestemmingen een eigen categorie te geven.
+- Leest zelf het WAN-totaal uit via SNMP; geen YAML in HA nodig.
+- `dst_overrides` en `app_overrides` om vaste bestemmingen of niet-herkende
+  protocollen een eigen categorie te geven.
 
 ## Installatie
 
@@ -15,4 +17,4 @@ een Sankey-overzicht zoals het Energy dashboard.
 `https://github.com/hbvdh/ha-sophos-traffic` → installeer *Sophos Traffic Collector*.
 
 Volledige uitleg (Sophos-instellingen, SNMP, dashboard): zie
-[`sophos_traffic/DOCS.md`](sophos_traffic/DOCS.md). Voorbeeldconfig voor HA staat in [`ha/`](ha/).
+[`sophos_traffic/DOCS.md`](sophos_traffic/DOCS.md). Een voorbeeld-Sankey-card staat in [`ha/`](ha/).

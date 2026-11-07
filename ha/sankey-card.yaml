@@ -1,18 +1,20 @@
-# Sankey Chart Card (MindFreeze, v6.x) — internetverkeer vandaag
-# Categorieën uitbreiden zodra je na een dag ziet welke er binnenkomen
+# Sankey Chart Card (MindFreeze, v6.x) — internetverkeer vandaag (download)
+# Vereist Sophos Traffic Collector 0.2.0+ (WAN-totaal via SNMP in de app).
+# Categorieën aanpassen aan wat er bij jou binnenkomt
 # (Settings → Devices & services → MQTT → device "Sophos Traffic").
 type: custom:sankey-chart
 title: Internet vandaag
 show_names: true
 unit_prefix: auto
 round: 1
-height: 300
+height: 400
 time_period_from: "now/d"
+ignore_missing_entities: true
 sections:
   - {}
   - sort_by: state
 nodes:
-  - id: sensor.sophos_wan_download
+  - id: sensor.sophos_traffic_wan_download
     name: Internet
     section: 0
   - id: sensor.sophos_traffic_streaming_media_download
@@ -21,25 +23,59 @@ nodes:
   - id: sensor.sophos_traffic_social_networking_download
     name: Social
     section: 1
+  - id: sensor.sophos_traffic_general_internet_download
+    name: Websites
+    section: 1
+  - id: sensor.sophos_traffic_software_update_download
+    name: Updates
+    section: 1
+  - id: sensor.sophos_traffic_general_business_download
+    name: Zakelijk
+    section: 1
+  - id: sensor.sophos_traffic_storage_and_backup_download
+    name: Opslag & backup
+    section: 1
+  - id: sensor.sophos_traffic_generative_ai_download
+    name: AI
+    section: 1
+  - id: sensor.sophos_traffic_pulseway_download
+    name: Pulseway
+    section: 1
+  - id: sensor.sophos_traffic_quic_niet_herkend_download
+    name: QUIC (niet herkend)
+    section: 1
+  - id: sensor.sophos_traffic_ssl_niet_herkend_download
+    name: SSL (niet herkend)
+    section: 1
   - id: sensor.sophos_traffic_infrastructure_download
-    name: Infrastructure
+    name: Infrastructuur
     section: 1
-  - id: sensor.sophos_traffic_uncategorized_download
-    name: Uncategorized
-    section: 1
-  - id: internet_niet_geclassificeerd
+  - id: internet_restpost
     type: remaining_parent_state
-    name: Niet geclassificeerd
+    name: Lopende sessies / overig
     section: 1
 links:
-  - source: sensor.sophos_wan_download
+  - source: sensor.sophos_traffic_wan_download
     target: sensor.sophos_traffic_streaming_media_download
-  - source: sensor.sophos_wan_download
+  - source: sensor.sophos_traffic_wan_download
     target: sensor.sophos_traffic_social_networking_download
-  - source: sensor.sophos_wan_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_general_internet_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_software_update_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_general_business_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_storage_and_backup_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_generative_ai_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_pulseway_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_quic_niet_herkend_download
+  - source: sensor.sophos_traffic_wan_download
+    target: sensor.sophos_traffic_ssl_niet_herkend_download
+  - source: sensor.sophos_traffic_wan_download
     target: sensor.sophos_traffic_infrastructure_download
-  - source: sensor.sophos_wan_download
-    target: sensor.sophos_traffic_uncategorized_download
-  - source: sensor.sophos_wan_download
-    target: internet_niet_geclassificeerd
-ignore_missing_entities: true
+  - source: sensor.sophos_traffic_wan_download
+    target: internet_restpost
