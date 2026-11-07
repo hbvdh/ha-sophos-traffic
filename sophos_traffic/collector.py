@@ -22,7 +22,7 @@ import time
 import devices
 import snmp
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
@@ -445,16 +445,22 @@ class Publisher:
                     "name": f"Apparaat {entry['name']} {label}",
                     "unique_id": f"{DEVICE_ID}_dev_{key}_{kind}",
                     "state_topic": f"{BASE_TOPIC}/dev/{key}/{kind}",
+                    "json_attributes_topic": f"{BASE_TOPIC}/dev/{key}/attr",
                     "availability_topic": AVAIL_TOPIC,
                     "device": self._device(),
                 }
                 config.update(extra)
                 self.client.publish(self._dev_config_topic(mac, kind),
                                     json.dumps(config), qos=1, retain=True)
+            attrs = {"naam": entry["name"], "profiel": entry["profile"], "mac": mac}
+            self.client.publish(f"{BASE_TOPIC}/dev/{key}/attr", json.dumps(attrs),
+                                qos=1, retain=True)
         for mac, name in self.dev.removed:
             log.info("Apparaat %s (%s) niet meer in de lijst, entities verwijderd", name, mac)
             for kind in DEV_KINDS:
                 self.client.publish(self._dev_config_topic(mac, kind), "", qos=1, retain=True)
+            self.client.publish(f"{BASE_TOPIC}/dev/{mac.replace(':', '')}/attr", "",
+                                qos=1, retain=True)
         config = {
             "name": "Melding",
             "unique_id": f"{DEVICE_ID}_melding",

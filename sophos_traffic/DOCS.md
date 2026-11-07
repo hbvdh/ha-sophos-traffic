@@ -112,6 +112,8 @@ Daar zie je de interfacenamen voor `snmp_interface`.
 | `sensor.sophos_traffic_apparaat_<naam>_laatste_internetcontact` | Tijdstip van het laatste internetcontact |
 | `event.sophos_traffic_melding` | Melding bij internetcontact van een `lokaal`-apparaat |
 
+Elke apparaatsensor heeft de attributen `naam`, `profiel` en `mac`.
+
 De melding draagt als attributen: `apparaat`, `mac`, `categorie`, `app`,
 `bestemming`, `poort`, `land`, `netwerk`, `tijd`. Een voorbeeld-automation staat in
 [`ha/automation-melding.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/automation-melding.yaml).
@@ -142,7 +144,9 @@ Sankey `energy_date_selection: true` door `time_period_from: "now/d"`.
 Plak card-YAML niet in de *Raw configuration editor*; die verwacht het hele dashboard.
 
 Trends per apparaat: zie [`ha/trend-cards.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/trend-cards.yaml)
-(staafgrafiek per dag, laatste internetcontact, geblokkeerde pogingen).
+(staafgrafiek per dag, laatste internetcontact, sessies, geblokkeerde pogingen).
+Deze cards gebruiken de HACS-card **auto-entities** en vullen zichzelf op basis
+van het profiel: een nieuw apparaat in de app-config komt vanzelf in de juiste card.
 
 ## Opslag en opruiming
 

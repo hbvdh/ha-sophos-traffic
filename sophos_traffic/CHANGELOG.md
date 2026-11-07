@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+- Apparaatsensoren krijgen attributen `naam`, `profiel` en `mac`.
+- Trend-cards (`ha/trend-cards.yaml`) vullen zichzelf via auto-entities: een nieuw
+  apparaat verschijnt automatisch in de card die bij zijn profiel hoort.
+
 ## 0.4.0
 - Benoemde apparaten (`devices`: MAC, naam, profiel `lokaal`/`internet`/`geblokkeerd`).
   Per apparaat sensoren voor download, upload, sessies naar internet,

@@ -1,39 +1,109 @@
-# Trends per benoemd apparaat (voorbeeld). Voeg elke card apart toe via
-# Add card → Manual, of zet ze in een vertical-stack. Vervang de entity-ID's
-# door die van jouw apparaten (Settings → Devices & services → MQTT →
-# device "Sophos Traffic"; ze heten sensor.sophos_traffic_apparaat_<naam>_...).
+# Trend-cards die zichzelf vullen op basis van het profiel van elk apparaat.
+# Vereist: Sophos Traffic Collector 0.4.1+ en de HACS-card "auto-entities"
+# (thomasloven/lovelace-auto-entities).
+# Elke card apart toevoegen: Add card → Manual. Cards zijn gescheiden door ---.
+# Een nieuw apparaat in de app-config verschijnt vanzelf in de juiste card.
 
-# 1) Internetverkeer per dag van apparaten met profiel "internet"
-type: statistics-graph
-title: Download per dag – servers
-chart_type: bar
-period: day
-days_to_show: 30
-stat_types:
-  - change
+# 1) Download per dag – profiel "internet"
+type: custom:auto-entities
+card:
+  type: statistics-graph
+  title: Download per dag – apparaten met internet
+  chart_type: bar
+  period: day
+  days_to_show: 30
+  stat_types:
+    - change
 grid_options:
   columns: full
-entities:
-  - entity: sensor.sophos_traffic_apparaat_server_download
-    name: Server
-  - entity: sensor.sophos_traffic_apparaat_nas_download
-    name: NAS
-
-# 2) Laatste internetcontact van apparaten met profiel "lokaal"
-# type: entities
-# title: Lokale apparaten – laatste internetcontact
-# entities:
-#   - entity: sensor.sophos_traffic_apparaat_shelly_laatste_internetcontact
-#     name: Shelly
-#     format: relative
-
-# 3) Geblokkeerde pogingen per dag (profiel "geblokkeerd")
-# type: statistics-graph
-# title: Geblokkeerde pogingen per dag
-# chart_type: bar
-# period: day
-# days_to_show: 30
-# stat_types: [change]
-# entities:
-#   - entity: sensor.sophos_traffic_apparaat_koelkast_geblokkeerd
-#     name: Koelkast
+filter:
+  template: >-
+    {% for s in states.sensor
+         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_download$')
+         | selectattr('attributes.profiel', 'defined')
+         | selectattr('attributes.profiel', 'eq', 'internet')
+         | sort(attribute='attributes.naam') %}
+      {{ {'entity': s.entity_id, 'name': s.attributes.naam} }},
+    {% endfor %}
+show_empty: false
+---
+# 2) Upload per dag – profiel "internet"
+type: custom:auto-entities
+card:
+  type: statistics-graph
+  title: Upload per dag – apparaten met internet
+  chart_type: bar
+  period: day
+  days_to_show: 30
+  stat_types:
+    - change
+grid_options:
+  columns: full
+filter:
+  template: >-
+    {% for s in states.sensor
+         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_upload$')
+         | selectattr('attributes.profiel', 'defined')
+         | selectattr('attributes.profiel', 'eq', 'internet')
+         | sort(attribute='attributes.naam') %}
+      {{ {'entity': s.entity_id, 'name': s.attributes.naam} }},
+    {% endfor %}
+show_empty: false
+---
+# 3) Laatste internetcontact – profiel "lokaal"
+type: custom:auto-entities
+card:
+  type: entities
+  title: Lokale apparaten – laatste internetcontact
+filter:
+  template: >-
+    {% for s in states.sensor
+         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_laatste_internetcontact$')
+         | selectattr('attributes.profiel', 'defined')
+         | selectattr('attributes.profiel', 'eq', 'lokaal')
+         | sort(attribute='attributes.naam') %}
+      {{ {'entity': s.entity_id, 'name': s.attributes.naam, 'format': 'relative'} }},
+    {% endfor %}
+show_empty: false
+---
+# 4) Sessies naar internet per dag – profiel "lokaal"
+type: custom:auto-entities
+card:
+  type: statistics-graph
+  title: Sessies naar internet per dag – lokale apparaten
+  chart_type: bar
+  period: day
+  days_to_show: 30
+  stat_types:
+    - change
+filter:
+  template: >-
+    {% for s in states.sensor
+         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_sessies$')
+         | selectattr('attributes.profiel', 'defined')
+         | selectattr('attributes.profiel', 'eq', 'lokaal')
+         | sort(attribute='attributes.naam') %}
+      {{ {'entity': s.entity_id, 'name': s.attributes.naam} }},
+    {% endfor %}
+show_empty: false
+---
+# 5) Geblokkeerde pogingen per dag – profiel "geblokkeerd"
+type: custom:auto-entities
+card:
+  type: statistics-graph
+  title: Geblokkeerde pogingen per dag
+  chart_type: bar
+  period: day
+  days_to_show: 30
+  stat_types:
+    - change
+filter:
+  template: >-
+    {% for s in states.sensor
+         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_geblokkeerd$')
+         | selectattr('attributes.profiel', 'defined')
+         | selectattr('attributes.profiel', 'eq', 'geblokkeerd')
+         | sort(attribute='attributes.naam') %}
+      {{ {'entity': s.entity_id, 'name': s.attributes.naam} }},
+    {% endfor %}
+show_empty: false
