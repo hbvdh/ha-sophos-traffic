@@ -1,0 +1,3 @@
+# Datumkiezer voor de Sankey-card (zelfde dashboard, zelfde view).
+# Kies dag / week / maand / jaar of een eigen periode; de Sankey volgt.
+type: energy-date-selection

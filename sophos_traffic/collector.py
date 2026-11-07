@@ -21,11 +21,12 @@ import time
 
 import snmp
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
 STATE_FILE = os.environ.get("STATE_FILE", "/data/state.json")
+NET_STATE_FILE = os.path.join(os.path.dirname(STATE_FILE) or ".", "state_net.json")
 FIREWALL_IP = os.environ.get("FIREWALL_IP", "").strip()
 if FIREWALL_IP.lower() in ("null", "none"):
     FIREWALL_IP = ""
@@ -45,6 +46,9 @@ DEVICE_ID = "sophos_traffic"
 
 UNCATEGORIZED = "Uncategorized"
 OVERFLOW = "Other categories"
+NET_PREFIX = "Netwerk "
+NET_OVERFLOW = "Netwerk overig"
+MAX_NETWORKS = 20
 TOTAL_SLUG = "total"
 WAN_SLUG = "wan"
 WAN_AVAIL_TOPIC = f"{BASE_TOPIC}/{WAN_SLUG}/status"
@@ -68,7 +72,7 @@ def parse(line):
 
 
 def classify(fields):
-    """Geeft (categorie, rx, tx) terug voor relevante sessies, anders None.
+    """Geeft (categorie, rx, tx, interface) terug voor relevante sessies, anders None.
 
     Relevant = toegestane, afgesloten sessie van een interne zone naar WAN.
     rx = bytes_received (download), tx = bytes_sent (upload), gezien vanaf
@@ -95,7 +99,8 @@ def classify(fields):
                 or APP_OVERRIDES.get(fields.get("app_name", "").strip().lower())
                 or fields.get("app_category", "").strip()
                 or UNCATEGORIZED)
-    return category, rx, tx
+    interface = fields.get("in_interface", "").strip() or "onbekend"
+    return category, rx, tx, interface
 
 
 # --------------------------------------------------------------------------
@@ -185,9 +190,10 @@ def slugify(name):
 # --------------------------------------------------------------------------
 
 class Counters:
-    def __init__(self, path, max_categories):
+    def __init__(self, path, max_categories, overflow=OVERFLOW):
         self.path = path
         self.max_categories = max_categories
+        self.overflow = overflow
         self.lock = threading.Lock()
         # slug -> {"name": str, "rx": int, "tx": int}
         self.data = {}
@@ -228,20 +234,20 @@ class Counters:
                 self.dirty = True
 
     def add(self, category, rx, tx):
-        """Telt op; geeft True terug als dit een nieuwe categorie is."""
+        """Telt op; geeft (slug, naam, is_new) terug."""
         slug = slugify(category)
         with self.lock:
             is_new = slug not in self.data
             if is_new and len(self.data) >= self.max_categories:
-                slug = slugify(OVERFLOW)
-                category = OVERFLOW
+                slug = slugify(self.overflow)
+                category = self.overflow
                 is_new = slug not in self.data
             if is_new:
                 self.data[slug] = {"name": category, "rx": 0, "tx": 0}
             self.data[slug]["rx"] += rx
             self.data[slug]["tx"] += tx
             self.dirty = True
-            return is_new
+            return slug, self.data[slug]["name"], is_new
 
     def snapshot(self):
         with self.lock:
@@ -253,11 +259,13 @@ class Counters:
 # --------------------------------------------------------------------------
 
 class Publisher:
-    def __init__(self, counters):
+    def __init__(self, counters, net_counters=None):
         import paho.mqtt.client as mqtt
 
         self.counters = counters
+        self.net_counters = net_counters
         self.wan_enabled = False
+        self.last_wan = None  # (rx, tx) van de laatste geslaagde SNMP-meting
         self.connected = threading.Event()
         try:
             self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
@@ -293,6 +301,8 @@ class Publisher:
         self.publish_discovery_all()
         if self.wan_enabled:
             self.publish_wan_discovery()
+            if self.last_wan:
+                self.publish_wan(*self.last_wan)
         self.publish_states()
 
     def _on_disconnect(self, client, userdata, *args):
@@ -337,6 +347,9 @@ class Publisher:
         self._discovery(TOTAL_SLUG, "Total", "tx")
         for slug, entry in self.counters.snapshot().items():
             self.publish_discovery(slug, entry["name"])
+        if self.net_counters:
+            for slug, entry in self.net_counters.snapshot().items():
+                self.publish_discovery(slug, entry["name"])
 
     # ---- WAN-tellers via SNMP ----
 
@@ -359,6 +372,7 @@ class Publisher:
             self.client.publish(topic, json.dumps(config), qos=1, retain=True)
 
     def publish_wan(self, rx, tx):
+        self.last_wan = (rx, tx)
         if not self.connected.is_set():
             return
         self.client.publish(f"{BASE_TOPIC}/{WAN_SLUG}/rx", rx, retain=True)
@@ -381,6 +395,10 @@ class Publisher:
             self.client.publish(f"{BASE_TOPIC}/{slug}/tx", entry["tx"], retain=True)
         self.client.publish(f"{BASE_TOPIC}/{TOTAL_SLUG}/rx", total_rx, retain=True)
         self.client.publish(f"{BASE_TOPIC}/{TOTAL_SLUG}/tx", total_tx, retain=True)
+        if self.net_counters:
+            for slug, entry in self.net_counters.snapshot().items():
+                self.client.publish(f"{BASE_TOPIC}/{slug}/rx", entry["rx"], retain=True)
+                self.client.publish(f"{BASE_TOPIC}/{slug}/tx", entry["tx"], retain=True)
 
 
 # --------------------------------------------------------------------------
@@ -408,11 +426,18 @@ def load_snmp_config(path=OPTIONS_FILE):
     if not host:
         log.warning("SNMP uit: geen snmp_host en geen firewall_ip ingesteld")
         return None
+    port = 161
+    if host.count(":") == 1:  # host:poort
+        host, _, port_s = host.partition(":")
+        try:
+            port = int(port_s)
+        except ValueError:
+            log.warning("Ongeldige poort in snmp_host, gebruik 161")
     try:
         interval = max(10, min(600, int(opt("snmp_interval", 60))))
     except (TypeError, ValueError):
         interval = 60
-    return {"host": host, "community": community,
+    return {"host": host, "port": port, "community": community,
             "interface": interface, "interval": interval}
 
 
@@ -423,7 +448,8 @@ class SnmpPoller(threading.Thread):
         super().__init__(name="snmp", daemon=True)
         self.cfg = cfg
         self.publisher = publisher
-        self.client = snmp.SnmpClient(cfg["host"], cfg["community"])
+        self.client = snmp.SnmpClient(cfg["host"], cfg["community"],
+                                      port=cfg.get("port", 161))
         self.stop_event = threading.Event()
         self.ifindex = None
         self.healthy = None  # None = nog onbekend
@@ -488,7 +514,8 @@ def main():
     OVERRIDES = load_overrides()
     APP_OVERRIDES = load_app_overrides()
     counters = Counters(STATE_FILE, MAX_CATEGORIES)
-    publisher = Publisher(counters)
+    net_counters = Counters(NET_STATE_FILE, MAX_NETWORKS, overflow=NET_OVERFLOW)
+    publisher = Publisher(counters, net_counters)
     snmp_cfg = load_snmp_config()
     publisher.wan_enabled = snmp_cfg is not None
     publisher.start()
@@ -548,21 +575,23 @@ def main():
                                 f.get("app_category"), f.get("bytes_received"),
                                 f.get("bytes_sent"))
                         continue
-                    category, rx, tx = result
+                    category, rx, tx, interface = result
                     stats["counted"] += 1
-                    if counters.add(category, rx, tx):
-                        log.info("Nieuwe categorie: %s", category)
-                        snap = counters.snapshot()
-                        slug = slugify(category)
-                        if slug not in snap:  # overloop naar "Other categories"
-                            slug = slugify(OVERFLOW)
-                        publisher.publish_discovery(slug, snap[slug]["name"])
-                    log.debug("%s +%d/%d bytes", category, rx, tx)
+                    slug, name, is_new = counters.add(category, rx, tx)
+                    if is_new:
+                        log.info("Nieuwe categorie: %s", name)
+                        publisher.publish_discovery(slug, name)
+                    slug, name, is_new = net_counters.add(NET_PREFIX + interface, rx, tx)
+                    if is_new:
+                        log.info("Nieuw netwerk: %s", name)
+                        publisher.publish_discovery(slug, name)
+                    log.debug("%s via %s +%d/%d bytes", category, interface, rx, tx)
 
         now = time.monotonic()
         if now >= next_flush:
             publisher.publish_states()
             counters.save()
+            net_counters.save()
             next_flush = now + FLUSH_INTERVAL
         if now >= next_stats:
             log.info("Laatste 15 min: %d datagrammen, %d geteld, %d genegeerd, %d van ander adres",
@@ -574,6 +603,7 @@ def main():
         poller.stop()
     publisher.publish_states()
     counters.save()
+    net_counters.save()
     publisher.stop()
     sock.close()
     log.info("Gestopt")

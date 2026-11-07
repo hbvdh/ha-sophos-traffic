@@ -33,7 +33,7 @@ Alles komt onder één device **Sophos Traffic** (Settings → Devices & service
 | `flush_interval` | 30 | Seconden tussen MQTT-updates en opslaan van tellers |
 | `max_categories` | 60 | Daarboven komt alles in *Other categories* |
 | `log_level` | info | `debug` toont genegeerde regels (max. 5 per 15 min) |
-| `snmp_host` | `firewall_ip` | IP van de firewall voor SNMP |
+| `snmp_host` | `firewall_ip` | IP van de firewall voor SNMP (optioneel `host:poort`) |
 | `snmp_community` | leeg | SNMP v2c-community. Leeg = SNMP uit |
 | `snmp_interface` | leeg | WAN-interface op naam (`Port11`) of als ifIndex (`16`). Leeg = SNMP uit |
 | `snmp_interval` | 60 | Seconden tussen SNMP-metingen (10–600) |
@@ -75,6 +75,12 @@ Daar zie je de interfacenamen voor `snmp_interface`.
 | `sensor.sophos_traffic_wan_download` / `_upload` | SNMP, realtime totaal over de WAN-lijn |
 | `sensor.sophos_traffic_<categorie>_download` / `_upload` | Syslog, per categorie |
 | `sensor.sophos_traffic_total_download` / `_upload` | Som van alle categorieën |
+| `sensor.sophos_traffic_netwerk_<interface>_download` / `_upload` | Syslog, per inkomende interface (VLAN) |
+
+De netwerksensoren heten naar de interface op de firewall, bijvoorbeeld
+`sensor.sophos_traffic_netwerk_lag01_11_download` voor `LAG01.11`. Een leesbare
+naam geef je in de card (`name:`). Sessies zonder interface komen in
+*Netwerk onbekend*. Maximaal 20 netwerken; daarboven *Netwerk overig*.
 
 Alle sensoren: `device_class: data_size`, `state_class: total_increasing`, in bytes.
 Weergave in GB stel je per sensor in (*Unit of measurement*); de long-term
@@ -82,9 +88,19 @@ statistics blijven in bytes.
 
 ## 4. Dashboard
 
-Installeer **Sankey Chart Card** (MindFreeze) via HACS. Nieuwe card → **Manual** →
-inhoud van [`ha/sankey-card.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/sankey-card.yaml).
-Pas de categorieën aan naar wat er bij jou binnenkomt.
+Installeer **Sankey Chart Card** (MindFreeze) via HACS. Voeg daarna op één
+dashboard twee cards toe (Edit dashboard → **Add card** → **Manual**):
+
+1. [`ha/date-picker-card.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/date-picker-card.yaml):
+   de datumkiezer (dag, week, maand, jaar of eigen periode).
+2. [`ha/sankey-card.yaml`](https://github.com/hbvdh/ha-sophos-traffic/blob/main/ha/sankey-card.yaml):
+   netwerken → Internet → categorieën. Volgt de datumkiezer.
+
+Zet de Sankey op volle breedte (tab **Layout**). Pas netwerknamen en categorieën
+aan naar wat er bij jou binnenkomt. Wil je geen datumkiezer, vervang dan in de
+Sankey `energy_date_selection: true` door `time_period_from: "now/d"`.
+
+Plak card-YAML niet in de *Raw configuration editor*; die verwacht het hele dashboard.
 
 ## Opslag en opruiming
 

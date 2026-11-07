@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+- Tellers per netwerk: bytes per inkomende firewall-interface (`in_interface`,
+  bijv. VLAN's), als sensoren `Netwerk <interface> download/upload`.
+- WAN-sensoren direct beschikbaar na een start (laatste SNMP-meting wordt bij
+  het verbinden met MQTT meteen verstuurd).
+- `snmp_host` accepteert `host:poort`.
+- Sankey-voorbeeld: netwerken → Internet → categorieën, met datumkiezer.
+
 ## 0.2.0
 - WAN-totaal via SNMP zit nu in de app zelf (`snmp_host`, `snmp_community`,
   `snmp_interface`, `snmp_interval`). Het YAML-package in HA is niet meer nodig.
