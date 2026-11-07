@@ -10,6 +10,7 @@
 # Zonder datumkiezer: vervang energy_date_selection door
 #   time_period_from: "now/d"
 #
+# Netwerken die (nog) niet bestaan worden overgeslagen (ignore_missing_entities).
 # Netwerknamen en categorieën aanpassen aan wat er bij jou binnenkomt
 # (Settings → Devices & services → MQTT → device "Sophos Traffic").
 type: custom:sankey-chart
@@ -25,15 +26,36 @@ sections:
   - {}
   - sort_by: state
 nodes:
-  # ---- links: netwerken ----
+  # ---- links: netwerken (interface op de firewall) ----
   - id: sensor.sophos_traffic_netwerk_lag01_download
-    name: Thuis (LAG01)
+    name: Network (LAG01)
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_lag01_90_download
+    name: WiFi (LAG01.90)
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_lag01_75_download
+    name: HBVDH_AC / PV (LAG01.75)
     section: 0
   - id: sensor.sophos_traffic_netwerk_lag01_11_download
     name: Management (LAG01.11)
     section: 0
-  - id: sensor.sophos_traffic_netwerk_lag01_75_download
-    name: Gast/PV (LAG01.75)
+  - id: sensor.sophos_traffic_netwerk_lag01_99_download
+    name: Gast (LAG01.99)
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_lag01_80_download
+    name: DMZ webserver (LAG01.80)
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_port5_download
+    name: PV-bridge Port5
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_port6_download
+    name: PV-bridge Port6
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_port7_download
+    name: PV-bridge Port7
+    section: 0
+  - id: sensor.sophos_traffic_netwerk_port8_download
+    name: PV-bridge Port8
     section: 0
   - id: net_restpost
     type: remaining_child_state
@@ -85,9 +107,23 @@ links:
   # netwerken -> Internet (restpost als laatste)
   - source: sensor.sophos_traffic_netwerk_lag01_download
     target: sensor.sophos_traffic_wan_download
-  - source: sensor.sophos_traffic_netwerk_lag01_11_download
+  - source: sensor.sophos_traffic_netwerk_lag01_90_download
     target: sensor.sophos_traffic_wan_download
   - source: sensor.sophos_traffic_netwerk_lag01_75_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_lag01_11_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_lag01_99_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_lag01_80_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_port5_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_port6_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_port7_download
+    target: sensor.sophos_traffic_wan_download
+  - source: sensor.sophos_traffic_netwerk_port8_download
     target: sensor.sophos_traffic_wan_download
   - source: net_restpost
     target: sensor.sophos_traffic_wan_download
