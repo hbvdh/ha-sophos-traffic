@@ -20,6 +20,8 @@ unit_prefix: auto
 round: 1
 height: 450
 energy_date_selection: true
+grid_options:
+  columns: full
 ignore_missing_entities: true
 sections:
   - sort_by: state
