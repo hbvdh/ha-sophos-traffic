@@ -1,5 +1,5 @@
 name: Sophos Traffic Collector
-version: "0.4.1"
+version: "0.4.2"
 slug: sophos_traffic
 description: >-
   Telt internetverkeer per Sophos app-categorie uit de firewall-syslog en

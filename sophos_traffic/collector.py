@@ -22,7 +22,7 @@ import time
 import devices
 import snmp
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5514"))
@@ -442,12 +442,22 @@ class Publisher:
             key = mac.replace(":", "")
             for kind, (label, extra) in DEV_KINDS.items():
                 config = {
-                    "name": f"Apparaat {entry['name']} {label}",
+                    "name": label,
                     "unique_id": f"{DEVICE_ID}_dev_{key}_{kind}",
                     "state_topic": f"{BASE_TOPIC}/dev/{key}/{kind}",
                     "json_attributes_topic": f"{BASE_TOPIC}/dev/{key}/attr",
                     "availability_topic": AVAIL_TOPIC,
-                    "device": self._device(),
+                    # elk benoemd apparaat is een eigen HA-device, gekoppeld aan
+                    # Sophos Traffic; friendly name wordt "<naam> <label>"
+                    "device": {
+                        "identifiers": [f"{DEVICE_ID}_dev_{key}"],
+                        "name": entry["name"],
+                        "manufacturer": "Sophos Traffic",
+                        "model": f"Profiel {entry['profile']}",
+                        # bewust geen "connections" (MAC): HA zou het device dan
+                        # samenvoegen met bv. het Shelly-device en de naam overnemen
+                        "via_device": DEVICE_ID,
+                    },
                 }
                 config.update(extra)
                 self.client.publish(self._dev_config_topic(mac, kind),

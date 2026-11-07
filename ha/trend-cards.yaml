@@ -1,10 +1,10 @@
 # Trend-cards die zichzelf vullen op basis van het profiel van elk apparaat.
-# Vereist: Sophos Traffic Collector 0.4.1+ en de HACS-card "auto-entities"
+# Vereist: Sophos Traffic Collector 0.4.2+ en de HACS-card "auto-entities"
 # (thomasloven/lovelace-auto-entities).
 # Elke card apart toevoegen: Add card → Manual. Cards zijn gescheiden door ---.
 # Een nieuw apparaat in de app-config verschijnt vanzelf in de juiste card.
-# Het template levert één JSON-lijst op (| tojson), zodat namen met komma's
-# of haakjes goed blijven.
+# Let op: statistics-graph werkt binnen auto-entities niet met een template-
+# filter; de grafieken gebruiken daarom het gewone filter op attribuut 'profiel'.
 
 # 1) Download per dag – profiel "internet"
 type: custom:auto-entities
@@ -19,16 +19,13 @@ card:
 grid_options:
   columns: full
 filter:
-  template: >-
-    {% set ns = namespace(l=[]) %}
-    {% for s in states.sensor
-         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_download$')
-         | selectattr('attributes.profiel', 'defined')
-         | selectattr('attributes.profiel', 'eq', 'internet')
-         | sort(attribute='attributes.naam') %}
-      {% set ns.l = ns.l + [{'entity': s.entity_id, 'name': s.attributes.naam}] %}
-    {% endfor %}
-    {{ ns.l | tojson }}
+  include:
+    - entity_id: sensor.sophos_traffic_apparaat_*_download
+      attributes:
+        profiel: internet
+sort:
+  method: attribute
+  attribute: naam
 show_empty: false
 ---
 # 2) Upload per dag – profiel "internet"
@@ -44,16 +41,13 @@ card:
 grid_options:
   columns: full
 filter:
-  template: >-
-    {% set ns = namespace(l=[]) %}
-    {% for s in states.sensor
-         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_upload$')
-         | selectattr('attributes.profiel', 'defined')
-         | selectattr('attributes.profiel', 'eq', 'internet')
-         | sort(attribute='attributes.naam') %}
-      {% set ns.l = ns.l + [{'entity': s.entity_id, 'name': s.attributes.naam}] %}
-    {% endfor %}
-    {{ ns.l | tojson }}
+  include:
+    - entity_id: sensor.sophos_traffic_apparaat_*_upload
+      attributes:
+        profiel: internet
+sort:
+  method: attribute
+  attribute: naam
 show_empty: false
 ---
 # 3) Laatste internetcontact – profiel "lokaal"
@@ -85,16 +79,13 @@ card:
   stat_types:
     - change
 filter:
-  template: >-
-    {% set ns = namespace(l=[]) %}
-    {% for s in states.sensor
-         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_sessies$')
-         | selectattr('attributes.profiel', 'defined')
-         | selectattr('attributes.profiel', 'eq', 'lokaal')
-         | sort(attribute='attributes.naam') %}
-      {% set ns.l = ns.l + [{'entity': s.entity_id, 'name': s.attributes.naam}] %}
-    {% endfor %}
-    {{ ns.l | tojson }}
+  include:
+    - entity_id: sensor.sophos_traffic_apparaat_*_sessies
+      attributes:
+        profiel: lokaal
+sort:
+  method: attribute
+  attribute: naam
 show_empty: false
 ---
 # 5) Geblokkeerde pogingen per dag – profiel "geblokkeerd"
@@ -108,14 +99,11 @@ card:
   stat_types:
     - change
 filter:
-  template: >-
-    {% set ns = namespace(l=[]) %}
-    {% for s in states.sensor
-         | selectattr('entity_id', 'match', 'sensor\.sophos_traffic_apparaat_.*_geblokkeerd$')
-         | selectattr('attributes.profiel', 'defined')
-         | selectattr('attributes.profiel', 'eq', 'geblokkeerd')
-         | sort(attribute='attributes.naam') %}
-      {% set ns.l = ns.l + [{'entity': s.entity_id, 'name': s.attributes.naam}] %}
-    {% endfor %}
-    {{ ns.l | tojson }}
+  include:
+    - entity_id: sensor.sophos_traffic_apparaat_*_geblokkeerd
+      attributes:
+        profiel: geblokkeerd
+sort:
+  method: attribute
+  attribute: naam
 show_empty: false

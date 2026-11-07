@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+- Elk benoemd apparaat is een eigen HA-device (gekoppeld aan *Sophos Traffic*),
+  zodat namen kort zijn: "S-HB-NAS03 download" in plaats van
+  "Sophos Traffic Apparaat S-HB-NAS03 download". Entity-ID's blijven gelijk.
+- Trend-cards: grafieken via het gewone auto-entities-filter op `profiel`
+  (statistics-graph werkt niet met een template-filter).
+
 ## 0.4.1
 - Apparaatsensoren krijgen attributen `naam`, `profiel` en `mac`.
 - Trend-cards (`ha/trend-cards.yaml`) vullen zichzelf via auto-entities: een nieuw
